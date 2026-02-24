@@ -3,19 +3,24 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import os
 
+# ================= CLOUDINARY IMPORT =================
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
 # ================= ENV =================
 load_dotenv()
 
 # ================= IMPORT ROUTES =================
 from routes.auth_routes import auth_bp
-from routes.complaint_routes import complaint_bp        # 🔐 User complaints
-from routes.complaints import complaints_bp             # 🌍 Public complaints
+from routes.complaint_routes import complaint_bp
+from routes.complaints import complaints_bp
 from routes.user_routes import user_bp
-from routes.analytics_routes import analytics_bp        # 📊 Analytics
-from routes.officer_routes import officer_bp            # 👮 Officer module
-from routes.authorities_routes import authorities_bp    # 🏛️ Authorities/Officers public listing
-from routes.chatbot_routes import chatbot_bp            # 🤖 Chatbot (NagrikBot)
-from routes.fcm_routes import fcm_bp                    # 🔥 FCM Notifications (NEW)
+from routes.analytics_routes import analytics_bp
+from routes.officer_routes import officer_bp
+from routes.authorities_routes import authorities_bp
+from routes.chatbot_routes import chatbot_bp
+from routes.fcm_routes import fcm_bp
 
 # ================= DATABASE =================
 from utils.database import init_db
@@ -23,12 +28,20 @@ from utils.database import init_db
 # ================= APP INIT =================
 app = Flask(__name__)
 
+# ================= CLOUDINARY CONFIG =================
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+    secure=True
+)
+
 # ================= CONFIG =================
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "your-secret-key")
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "your-jwt-secret")
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB uploads
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
-# ================= CORS FIX FOR CHROME =================
+# ================= CORS =================
 CORS(
     app,
     resources={
@@ -44,7 +57,6 @@ CORS(
     always_send=True,
 )
 
-# ================= HANDLE OPTIONS (PREFLIGHT) =================
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
@@ -55,7 +67,6 @@ def handle_preflight():
         response.headers.add("Access-Control-Max-Age", "3600")
         return response, 200
 
-# ================= DEBUG LOGGING =================
 @app.before_request
 def log_request():
     print(f"\n{'='*70}")
@@ -83,30 +94,16 @@ init_db()
 
 # ================= REGISTER BLUEPRINTS =================
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
-
-# 👤 USER
 app.register_blueprint(complaint_bp, url_prefix="/api/complaints")
 app.register_blueprint(user_bp, url_prefix="/api/users")
-
-# 🌍 PUBLIC
 app.register_blueprint(complaints_bp, url_prefix="/api/public")
-
-# 📊 ANALYTICS
 app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
-
-# 👮 OFFICER MODULE
 app.register_blueprint(officer_bp, url_prefix="/api/officer")
-
-# 🏛️ AUTHORITIES (Public)
 app.register_blueprint(authorities_bp, url_prefix="/api/authorities")
-
-# 🤖 CHATBOT
 app.register_blueprint(chatbot_bp, url_prefix="/api/chatbot")
-
-# 🔥 FCM NOTIFICATIONS (NEW)
 app.register_blueprint(fcm_bp, url_prefix="/api/fcm")
 
-# ================= IMAGE SERVING =================
+# ================= IMAGE SERVING (OLD - KEEPING FOR SAFETY) =================
 @app.route("/uploads/<path:filename>")
 def serve_uploaded_files(filename):
     upload_root = os.path.join(os.getcwd(), "uploads")
@@ -127,7 +124,7 @@ def index():
             "authorities": "/api/authorities",
             "chatbot": "/api/chatbot/message",
             "fcm": "/api/fcm/register-token",
-            "uploads": "/uploads/complaints/<image>.jpg"
+            "uploads": "Now using Cloudinary"
         }
     })
 
@@ -155,11 +152,11 @@ if __name__ == "__main__":
     debug_mode = os.getenv("FLASK_DEBUG", "False") == "True"
 
     print("\n" + "="*70)
-    print("🚀 CITYCARE BACKEND - WITH FIREBASE NOTIFICATIONS")
+    print("🚀 CITYCARE BACKEND - WITH CLOUDINARY + FIREBASE")
     print("="*70)
-    print(f"✅ CORS: Enabled for all origins")
-    print(f"✅ Preflight: OPTIONS requests handled")
-    print(f"✅ Firebase: Notifications enabled")
+    print(f"✅ CORS: Enabled")
+    print(f"✅ Cloudinary: Enabled")
+    print(f"✅ Firebase: Enabled")
     print(f"✅ Running on Port: {port}")
     print("="*70 + "\n")
 
