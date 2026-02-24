@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from bson import ObjectId
 from datetime import datetime
 from utils.database import get_db
-from utils.urgency_engine_enhanced import calculate_urgency   # ✅ FIX 1: Enhanced engine import
+from utils.urgency_engine import calculate_urgency   # ✅ FIX 1: Enhanced engine import
 from utils.firebase_service import firebase_service
 from middleware.auth_middleware import token_required
 import cloudinary.uploader
