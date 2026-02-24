@@ -215,7 +215,6 @@ class UrgencyAnalyzer:
     def _build_stemming_rules(self) -> Dict[str, str]:
         """
         Build stemming rules to normalize words
-        Example: "hazardous" -> "hazard", "dangerous" -> "danger"
         """
         return {
             # -ous endings
@@ -251,76 +250,47 @@ class UrgencyAnalyzer:
         }
 
     def tokenize(self, text: str) -> List[str]:
-        """
-        Tokenize text into words and phrases
-        Returns both individual words and 2-3 word phrases
-        """
+        """Tokenize text into words and phrases"""
         text = text.lower().strip()
-
-        # Remove special characters but keep spaces
         text = re.sub(r'[^\w\s]', ' ', text)
-
-        # Split into words
         words = text.split()
 
         tokens = []
-
-        # Add individual words
         tokens.extend(words)
 
-        # Add 2-word phrases
         for i in range(len(words) - 1):
-            phrase = f"{words[i]} {words[i+1]}"
-            tokens.append(phrase)
+            tokens.append(f"{words[i]} {words[i+1]}")
 
-        # Add 3-word phrases
         for i in range(len(words) - 2):
-            phrase = f"{words[i]} {words[i+1]} {words[i+2]}"
-            tokens.append(phrase)
+            tokens.append(f"{words[i]} {words[i+1]} {words[i+2]}")
 
         return tokens
 
     def stem_word(self, word: str) -> str:
-        """
-        Apply stemming rules to normalize words
-        """
-        # Check exact match in stemming rules
+        """Apply stemming rules to normalize words"""
         if word in self.stemming_rules:
             return self.stemming_rules[word]
 
-        # Apply common suffix removal
-        # -ous
         if word.endswith('ous') and len(word) > 4:
             return word[:-3]
-
-        # -ed
         if word.endswith('ed') and len(word) > 3:
             return word[:-2]
-
-        # -ing
         if word.endswith('ing') and len(word) > 4:
             return word[:-3]
-
-        # -s (plural)
         if word.endswith('s') and len(word) > 2 and not word.endswith('ss'):
             return word[:-1]
 
         return word
 
     def analyze_text(self, description: str, category: str) -> Dict:
-        """
-        Analyze text and calculate urgency score
-        Returns: {score: int, matched_keywords: List, reasoning: str}
-        """
+        """Analyze text and calculate urgency score"""
         tokens = self.tokenize(description)
 
         matched_keywords = []
         total_boost = 0
         max_severity = 0
 
-        # Check each token
         for token in tokens:
-            # Check exact match
             if token in self.keyword_db:
                 keyword_data = self.keyword_db[token]
                 matched_keywords.append({
@@ -332,7 +302,6 @@ class UrgencyAnalyzer:
                 max_severity = max(max_severity, keyword_data["severity"])
                 continue
 
-            # Check stemmed version
             stemmed = self.stem_word(token)
             if stemmed != token and stemmed in self.keyword_db:
                 keyword_data = self.keyword_db[stemmed]
@@ -344,10 +313,8 @@ class UrgencyAnalyzer:
                 total_boost += keyword_data["boost"]
                 max_severity = max(max_severity, keyword_data["severity"])
 
-        # Calculate base score
         base_score = 30
 
-        # Add category weight
         category_weights = {
             "roads": 20,
             "water supply": 25,
@@ -360,19 +327,12 @@ class UrgencyAnalyzer:
 
         category_boost = category_weights.get(category.lower(), 10)
 
-        # Calculate final score
-        # Use max severity if very high, otherwise use boost
         if max_severity >= 80:
             final_score = min(100, base_score + max_severity)
         else:
             final_score = min(100, base_score + category_boost + total_boost)
 
-        # Generate reasoning
-        reasoning = self._generate_reasoning(
-            matched_keywords,
-            category,
-            final_score
-        )
+        reasoning = self._generate_reasoning(matched_keywords, category, final_score)
 
         return {
             "score": final_score,
@@ -411,14 +371,23 @@ class UrgencyAnalyzer:
         return " | ".join(reasons)
 
 
-# Main function for backward compatibility
-def calculate_urgency(description: str, category: str, image_path: Optional[str] = None) -> int:
+# ============================================================
+# MAIN FUNCTION — Cloudinary URL + Local Path dono support
+# ============================================================
+
+def calculate_urgency(
+        description: str,
+        category: str,
+        image_path: Optional[str] = None,   # Local file path (optional)
+        image_url: Optional[str] = None     # ✅ Cloudinary URL (optional)
+) -> int:
     """
-    Enhanced urgency calculation with advanced NLP
+    Enhanced urgency calculation with advanced NLP + image analysis.
+    Accepts either a local image_path OR a Cloudinary image_url.
     """
     analyzer = UrgencyAnalyzer()
 
-    # Analyze text
+    # Step 1: Text NLP analysis
     text_analysis = analyzer.analyze_text(description, category)
     urgency_score = text_analysis["score"]
 
@@ -431,14 +400,43 @@ def calculate_urgency(description: str, category: str, image_path: Optional[str]
             print(f"      - {kw['word']} (severity: {kw['severity']}, boost: +{kw['boost']})")
     print(f"   Reasoning: {text_analysis['reasoning']}")
 
-    # Image analysis boost
-    if image_path and os.path.exists(image_path):
-        try:
+    # Step 2: Image analysis
+    try:
+        # --- Option A: Local file path provided ---
+        if image_path and os.path.exists(image_path):
+            print(f"   🖼️ Using local image: {image_path}")
             image_boost = analyze_image_urgency(image_path, category)
             print(f"   Image Boost: +{image_boost}")
             urgency_score = min(100, urgency_score + image_boost)
-        except Exception as e:
-            print(f"   ⚠️ Image analysis failed: {e}")
+
+        # --- Option B: Cloudinary URL provided ---
+        elif image_url:
+            print(f"   🌐 Downloading image from Cloudinary URL...")
+            response = requests.get(image_url, timeout=10)
+
+            if response.status_code == 200:
+                temp_path = "/tmp/urgency_temp_image.jpg"
+
+                with open(temp_path, "wb") as f:
+                    f.write(response.content)
+
+                print(f"   ✅ Image downloaded ({len(response.content) // 1024} KB)")
+
+                image_boost = analyze_image_urgency(temp_path, category)
+                print(f"   Image Boost: +{image_boost}")
+                urgency_score = min(100, urgency_score + image_boost)
+
+                # Cleanup temp file
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            else:
+                print(f"   ❌ Failed to download image (HTTP {response.status_code})")
+
+        else:
+            print(f"   ℹ️ No image provided — text-only analysis")
+
+    except Exception as e:
+        print(f"   ⚠️ Image analysis failed: {e}")
 
     print(f"   FINAL SCORE: {urgency_score}/100\n")
 
@@ -447,26 +445,24 @@ def calculate_urgency(description: str, category: str, image_path: Optional[str]
 
 def analyze_image_urgency(image_path: str, category: str) -> int:
     """
-    Analyze image using Hugging Face's free inference API
-    Returns urgency boost (0-30 points) based on visual severity
+    Analyze image using Hugging Face's free inference API.
+    Falls back to local pixel analysis if API unavailable.
+    Returns urgency boost (0-30 points).
     """
 
-    # Updated Hugging Face API endpoint (moved from api-inference to router)
     API_URL = "https://router.huggingface.co/models/openai/clip-vit-large-patch14"
     API_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
 
     if not API_TOKEN:
-        print("   ⚠️ No HUGGINGFACE_TOKEN - skipping image analysis")
-        return 0
+        print("   ⚠️ No HUGGINGFACE_TOKEN — skipping HuggingFace, using local fallback")
+        return analyze_image_urgency_local(image_path, category)
 
     headers = {"Authorization": f"Bearer {API_TOKEN}"}
 
     try:
-        # Read and encode image
         with open(image_path, "rb") as image_file:
             image_data = base64.b64encode(image_file.read()).decode()
 
-        # Define severity labels
         severity_labels = {
             "roads": [
                 "severe road damage with large dangerous potholes",
@@ -508,50 +504,34 @@ def analyze_image_urgency(image_path: str, category: str) -> int:
             }
         }
 
-        print(f"   🚀 Sending image to Hugging Face API...")
-        print(f"   📝 Category: {category}")
-        print(f"   🏷️ Testing labels: {labels[:2]}...")  # Show first 2 labels
+        print(f"   🚀 Sending image to HuggingFace API...")
 
         response = requests.post(API_URL, headers=headers, json=payload, timeout=15)
 
         if response.status_code == 200:
             result = response.json()
-            print(f"   🔍 Image API Response: {result}")
+            print(f"   🔍 API Response: {result}")
 
-            # CLIP returns list of scores corresponding to candidate_labels
             if isinstance(result, list) and len(result) >= 3:
-                # Labels order: [severe, moderate, minor]
                 severe_confidence = result[0]
                 moderate_confidence = result[1]
 
-                print(f"   📊 Confidence - Severe: {severe_confidence:.2%}, Moderate: {moderate_confidence:.2%}")
+                print(f"   📊 Confidence — Severe: {severe_confidence:.2%}, Moderate: {moderate_confidence:.2%}")
 
-                # Higher confidence in severe = higher boost
                 if severe_confidence > 0.5:
-                    boost = 30
-                    print(f"   ✅ High severity detected: +{boost} urgency boost")
-                    return boost
+                    return 30
                 elif severe_confidence > 0.35:
-                    boost = 20
-                    print(f"   ⚠️ Moderate severity detected: +{boost} urgency boost")
-                    return boost
+                    return 20
                 elif moderate_confidence > 0.4:
-                    boost = 10
-                    print(f"   ℹ️ Some issues detected: +{boost} urgency boost")
-                    return boost
+                    return 10
                 else:
-                    print(f"   ✓ Minor or no issues detected: +0 urgency boost")
                     return 0
 
-            # Alternative format (some models return dict)
             elif isinstance(result, dict) and "scores" in result:
                 scores = result["scores"]
                 if len(scores) >= 3:
                     severe_confidence = scores[0]
                     moderate_confidence = scores[1]
-
-                    print(f"   📊 Confidence - Severe: {severe_confidence:.2%}, Moderate: {moderate_confidence:.2%}")
-
                     if severe_confidence > 0.5:
                         return 30
                     elif severe_confidence > 0.35:
@@ -560,18 +540,21 @@ def analyze_image_urgency(image_path: str, category: str) -> int:
                         return 10
 
         else:
-            print(f"   ❌ Image API returned status {response.status_code}: {response.text[:200]}")
+            print(f"   ❌ API status {response.status_code}: {response.text[:200]}")
 
     except Exception as e:
-        print(f"   ⚠️ Image API error: {e}")
+        print(f"   ⚠️ HuggingFace API error: {e}")
 
-    # If API failed, try local analysis as fallback
-    print("   🔄 API unavailable, using local image analysis...")
+    # Fallback to local analysis
+    print("   🔄 API unavailable — using local image analysis...")
     return analyze_image_urgency_local(image_path, category)
 
 
 def analyze_image_urgency_local(image_path: str, category: str) -> int:
-
+    """
+    Local pixel-based image analysis fallback.
+    No external API needed — uses PIL + numpy.
+    """
     try:
         from PIL import Image
         import numpy as np
@@ -583,55 +566,46 @@ def analyze_image_urgency_local(image_path: str, category: str) -> int:
         img.thumbnail((400, 400))
         img_array = np.array(img)
 
-        print(f"   🖼️ Analyzing locally ({img.size[0]}x{img.size[1]} pixels)...")
+        print(f"   🖼️ Local analysis ({img.size[0]}x{img.size[1]} px)...")
 
-        # Image metrics
         avg_brightness = np.mean(img_array)
         darkness_score = (255 - avg_brightness) / 255
 
         gray = np.mean(img_array, axis=2)
         contrast = np.std(gray) / 128
 
-        color_std = np.std(img_array, axis=(0,1)).mean() / 128
+        color_std = np.std(img_array, axis=(0, 1)).mean() / 128
         dark_pixels = np.sum(np.mean(img_array, axis=2) < 80) / (img_array.shape[0] * img_array.shape[1])
 
-        print(f"   📊 Darkness: {darkness_score:.2f}, Contrast: {contrast:.2f}, Dark: {dark_pixels:.1%}")
+        print(f"   📊 Darkness: {darkness_score:.2f}, Contrast: {contrast:.2f}, Dark pixels: {dark_pixels:.1%}")
 
         boost = 0
 
         if category.lower() in ["roads", "road"]:
             if contrast > 0.8 and dark_pixels > 0.15:
                 boost = 30
-                print(f"   ✅ SEVERE road damage detected")
             elif contrast > 0.6 or dark_pixels > 0.10:
                 boost = 20
-                print(f"   ⚠️ MODERATE road damage detected")
             elif contrast > 0.4:
                 boost = 10
-                print(f"   ℹ️ Minor road issues detected")
 
         elif category.lower() in ["drainage", "water supply", "water"]:
             if darkness_score > 0.6 or dark_pixels > 0.25:
                 boost = 30
-                print(f"   ✅ SEVERE water/drainage issue")
             elif darkness_score > 0.4 or dark_pixels > 0.15:
                 boost = 20
-                print(f"   ⚠️ MODERATE water/drainage issue")
             elif dark_pixels > 0.08:
                 boost = 10
 
         elif category.lower() in ["sanitation", "garbage"]:
             if color_std > 0.7 and darkness_score > 0.3:
                 boost = 30
-                print(f"   ✅ SEVERE garbage accumulation")
             elif color_std > 0.5:
                 boost = 20
-                print(f"   ⚠️ MODERATE garbage present")
             elif color_std > 0.3:
                 boost = 10
 
         else:
-            # Generic severity score
             severity = (darkness_score + contrast + color_std) / 3
             if severity > 0.6:
                 boost = 30
@@ -641,10 +615,11 @@ def analyze_image_urgency_local(image_path: str, category: str) -> int:
                 boost = 10
             print(f"   📈 Generic severity: {severity:.2f} → +{boost}")
 
+        print(f"   ✅ Local boost: +{boost}")
         return boost
 
     except ImportError:
-        print("   ⚠️ Install Pillow/numpy for local analysis: pip install Pillow numpy")
+        print("   ⚠️ Install Pillow/numpy: pip install Pillow numpy")
         return 0
     except Exception as e:
         print(f"   ❌ Local analysis error: {e}")
