@@ -450,8 +450,8 @@ def analyze_image_urgency(image_path: str, category: str) -> int:
     Returns urgency boost (0-30 points).
     """
 
-    # ✅ Router URL (api-inference.huggingface.co discontinued — 410 Gone)
-    API_URL = "https://router.huggingface.co/models/openai/clip-vit-large-patch14"
+    # ✅ Correct router URL (hf-inference provider required)
+    API_URL = "https://router.huggingface.co/hf-inference/models/openai/clip-vit-large-patch14"
     API_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
 
     if not API_TOKEN:
