@@ -451,7 +451,7 @@ def analyze_image_urgency(image_path: str, category: str) -> int:
     """
 
     # ✅ Correct endpoint for zero-shot image classification
-    API_URL = "https://api-inference.huggingface.co/pipeline/zero-shot-image-classification/openai/clip-vit-large-patch14"
+    API_URL = "https://api-inference.huggingface.co/models/openai/clip-vit-large-patch14"
     API_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
 
     if not API_TOKEN:
