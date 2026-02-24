@@ -1,4 +1,4 @@
-# utils/urgency_engine.py
+# utils/urgency_engine_enhanced.py
 
 import requests
 import base64
@@ -450,14 +450,18 @@ def analyze_image_urgency(image_path: str, category: str) -> int:
     Returns urgency boost (0-30 points).
     """
 
-    API_URL = "https://router.huggingface.co/openai/clip-vit-large-patch14"  # ✅ NO /models/ in path
+    # ✅ Correct endpoint for zero-shot image classification
+    API_URL = "https://api-inference.huggingface.co/pipeline/zero-shot-image-classification/openai/clip-vit-large-patch14"
     API_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
 
     if not API_TOKEN:
         print("   ⚠️ No HUGGINGFACE_TOKEN — skipping HuggingFace, using local fallback")
         return analyze_image_urgency_local(image_path, category)
 
-    headers = {"Authorization": f"Bearer {API_TOKEN}"}
+    headers = {
+        "Authorization": f"Bearer {API_TOKEN}",
+        "Content-Type": "application/json"
+    }
 
     try:
         with open(image_path, "rb") as image_file:
@@ -497,24 +501,31 @@ def analyze_image_urgency(image_path: str, category: str) -> int:
             "minor or no issue"
         ])
 
+        # ✅ Correct payload format for pipeline endpoint
         payload = {
-            "inputs": {
-                "image": image_data,
-                "candidate_labels": labels
+            "inputs": image_data,           # base64 string directly (not nested dict)
+            "parameters": {
+                "candidate_labels": labels  # labels go inside parameters
             }
         }
 
         print(f"   🚀 Sending image to HuggingFace API...")
 
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=15)
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)  # timeout 30s
 
         if response.status_code == 200:
             result = response.json()
             print(f"   🔍 API Response: {result}")
 
-            if isinstance(result, list) and len(result) >= 3:
-                severe_confidence = result[0]
-                moderate_confidence = result[1]
+            # ✅ Pipeline format: [{"label": "severe...", "score": 0.72}, {"label": "moderate...", "score": 0.20}, ...]
+            if isinstance(result, list) and len(result) >= 1 and isinstance(result[0], dict) and "label" in result[0]:
+                label_scores = {item["label"]: item["score"] for item in result}
+
+                severe_label = labels[0]
+                moderate_label = labels[1]
+
+                severe_confidence = label_scores.get(severe_label, 0)
+                moderate_confidence = label_scores.get(moderate_label, 0)
 
                 print(f"   📊 Confidence — Severe: {severe_confidence:.2%}, Moderate: {moderate_confidence:.2%}")
 
@@ -527,17 +538,17 @@ def analyze_image_urgency(image_path: str, category: str) -> int:
                 else:
                     return 0
 
-            elif isinstance(result, dict) and "scores" in result:
-                scores = result["scores"]
-                if len(scores) >= 3:
-                    severe_confidence = scores[0]
-                    moderate_confidence = scores[1]
-                    if severe_confidence > 0.5:
-                        return 30
-                    elif severe_confidence > 0.35:
-                        return 20
-                    elif moderate_confidence > 0.4:
-                        return 10
+            # Fallback: old list-of-floats format
+            elif isinstance(result, list) and len(result) >= 2 and isinstance(result[0], float):
+                severe_confidence = result[0]
+                moderate_confidence = result[1]
+                print(f"   📊 Confidence — Severe: {severe_confidence:.2%}, Moderate: {moderate_confidence:.2%}")
+                if severe_confidence > 0.5:
+                    return 30
+                elif severe_confidence > 0.35:
+                    return 20
+                elif moderate_confidence > 0.4:
+                    return 10
 
         else:
             print(f"   ❌ API status {response.status_code}: {response.text[:200]}")
