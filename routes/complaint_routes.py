@@ -3,23 +3,19 @@ from bson import ObjectId
 from datetime import datetime
 from utils.database import get_db
 from utils.urgency_engine import calculate_urgency
-from utils.firebase_service import firebase_service  # 🔥 NEW
+from utils.firebase_service import firebase_service
 from middleware.auth_middleware import token_required
+import cloudinary.uploader
 import os
-import uuid
 
 complaint_bp = Blueprint("complaint", __name__)
-
-UPLOAD_FOLDER = "uploads/complaints"
 
 @complaint_bp.route("/submit", methods=["POST"])
 @token_required
 def submit_complaint(current_user):
-    """Submit a new complaint with image analysis for urgency calculation"""
     db = get_db()
 
     try:
-        # Get form data
         category = request.form.get("category")
         description = request.form.get("description")
         location = request.form.get("location")
@@ -32,28 +28,24 @@ def submit_complaint(current_user):
         image_url = None
         image_path = None
 
-        # Handle image upload
+        # ✅ CLOUDINARY IMAGE UPLOAD
         if "image" in request.files:
             file = request.files["image"]
             if file.filename != "":
-                os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-                filename = f"{uuid.uuid4()}.jpg"
-                file_path = os.path.join(UPLOAD_FOLDER, filename)
-                file.save(file_path)
+                result = cloudinary.uploader.upload(
+                    file,
+                    folder="citycare_complaints"
+                )
+                image_url = result.get("secure_url")
+                image_path = None  # No local file now
 
-                image_url = f"/uploads/complaints/{filename}"
-                image_path = file_path  # For image analysis
-
-        # 🆕 Calculate urgency with image analysis
+        # Urgency calculation (without local image path now)
         urgency = calculate_urgency(
             description=description,
             category=category,
-            image_path=image_path  # Pass image path for AI analysis
+            image_path=image_path
         )
 
-        print(f"✅ Calculated urgency: {urgency} (with image analysis)")
-
-        # Create complaint document
         complaint = {
             "user_id": ObjectId(current_user["user_id"]),
             "category": category,
@@ -78,9 +70,8 @@ def submit_complaint(current_user):
         result = db.complaints.insert_one(complaint)
         complaint_id = str(result.inserted_id)
 
-        # 🔥 SEND NOTIFICATIONS TO ALL OFFICERS
+        # 🔥 NOTIFY OFFICERS
         try:
-            # Get all officers' FCM tokens
             officers = list(db.users.find(
                 {"role": "officer", "fcm_token": {"$exists": True, "$ne": None}},
                 {"fcm_token": 1}
@@ -89,20 +80,16 @@ def submit_complaint(current_user):
             officer_tokens = [o["fcm_token"] for o in officers]
 
             if officer_tokens:
-                sent_count = firebase_service.notify_new_complaint(
+                firebase_service.notify_new_complaint(
                     officer_tokens=officer_tokens,
                     complaint_id=complaint_id,
                     category=category,
                     location=location,
                     urgency=urgency
                 )
-                print(f"✅ Notification sent to {sent_count}/{len(officer_tokens)} officers")
-            else:
-                print("⚠️ No officers with FCM tokens found")
 
         except Exception as e:
-            print(f"⚠️ Error sending notifications to officers: {e}")
-            # Don't fail the request if notifications fail
+            print(f"Notification error: {e}")
 
         return jsonify({
             "message": "Complaint submitted successfully",
@@ -111,14 +98,13 @@ def submit_complaint(current_user):
         }), 201
 
     except Exception as e:
-        print(f"❌ Error submitting complaint: {e}")
+        print(f"Submit error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
 @complaint_bp.route("/<complaint_id>", methods=["GET"])
 @token_required
 def get_complaint(current_user, complaint_id):
-    """Get complaint details"""
     db = get_db()
 
     try:
@@ -127,7 +113,6 @@ def get_complaint(current_user, complaint_id):
         if not complaint:
             return jsonify({"error": "Complaint not found"}), 404
 
-        # Verify ownership or officer access
         if (str(complaint.get("user_id")) != current_user["user_id"] and
                 current_user.get("role") != "officer"):
             return jsonify({"error": "Unauthorized"}), 403
@@ -140,7 +125,6 @@ def get_complaint(current_user, complaint_id):
             "status": complaint.get("status", "pending"),
             "urgency": complaint.get("urgency", 0),
             "imageUrl": complaint.get("image_url", ""),
-            # ✅ FIXED: Use consistent field name
             "proofImageUrl": complaint.get("proof_image_url", ""),
             "feedbackRating": complaint.get("feedback_rating"),
             "feedbackComment": complaint.get("feedback_comment"),
@@ -158,7 +142,6 @@ def get_complaint(current_user, complaint_id):
 @complaint_bp.route("/my-complaints", methods=["GET"])
 @token_required
 def get_my_complaints(current_user):
-    """Get all complaints submitted by the current user"""
     db = get_db()
 
     try:
@@ -177,7 +160,6 @@ def get_my_complaints(current_user):
                 "status": c.get("status", "pending"),
                 "urgency": c.get("urgency", 0),
                 "imageUrl": c.get("image_url", ""),
-                # ✅ FIXED: Include proof image URL
                 "proofImageUrl": c.get("proof_image_url", ""),
                 "feedbackRating": c.get("feedback_rating"),
                 "feedbackComment": c.get("feedback_comment"),
@@ -195,17 +177,13 @@ def get_my_complaints(current_user):
 @complaint_bp.route("/all", methods=["GET"])
 @token_required
 def get_all_complaints(current_user):
-    """Get all complaints (for officers or admin)"""
     db = get_db()
 
-    # Only officers can see all complaints
     if current_user.get("role") not in ["officer", "admin"]:
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
-        complaints = list(
-            db.complaints.find().sort("urgency", -1)
-        )
+        complaints = list(db.complaints.find().sort("urgency", -1))
 
         formatted = []
         for c in complaints:
@@ -217,7 +195,6 @@ def get_all_complaints(current_user):
                 "status": c.get("status", "pending"),
                 "urgency": c.get("urgency", 0),
                 "imageUrl": c.get("image_url", ""),
-                # ✅ FIXED: Include proof image URL
                 "proofImageUrl": c.get("proof_image_url", ""),
                 "feedbackRating": c.get("feedback_rating"),
                 "feedbackComment": c.get("feedback_comment"),
