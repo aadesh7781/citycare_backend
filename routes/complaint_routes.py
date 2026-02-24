@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from bson import ObjectId
 from datetime import datetime
 from utils.database import get_db
-from utils.urgency_engine import calculate_urgency
+from utils.urgency_engine_enhanced import calculate_urgency   # ✅ FIX 1: Enhanced engine import
 from utils.firebase_service import firebase_service
 from middleware.auth_middleware import token_required
 import cloudinary.uploader
@@ -26,7 +26,6 @@ def submit_complaint(current_user):
             return jsonify({"error": "Missing required fields"}), 400
 
         image_url = None
-        image_path = None
 
         # ✅ CLOUDINARY IMAGE UPLOAD
         if "image" in request.files:
@@ -37,13 +36,12 @@ def submit_complaint(current_user):
                     folder="citycare_complaints"
                 )
                 image_url = result.get("secure_url")
-                image_path = None  # No local file now
 
-        # Urgency calculation (without local image path now)
+        # ✅ FIX 2: image_url pass karo (Cloudinary URL)
         urgency = calculate_urgency(
             description=description,
             category=category,
-            image_path=image_path
+            image_url=image_url
         )
 
         complaint = {
