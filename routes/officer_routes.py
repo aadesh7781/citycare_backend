@@ -4,6 +4,7 @@ from datetime import datetime
 from utils.database import get_db
 from utils.firebase_service import firebase_service
 from middleware.auth_middleware import token_required
+import cloudinary.uploader
 import os
 import uuid
 
@@ -226,10 +227,15 @@ def update_complaint_status(current_user, complaint_id):
         if file.filename == "":
             return jsonify({"error": "Invalid image"}), 400
 
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-        filename = f"{uuid.uuid4()}.jpg"
-        file.save(os.path.join(UPLOAD_FOLDER, filename))
-        proof_image_url = f"/uploads/officer_proofs/{filename}"
+        # ✅ Upload proof image to Cloudinary (production-safe, persists across restarts)
+        try:
+            result = cloudinary.uploader.upload(
+                file,
+                folder="citycare_proof_images"
+            )
+            proof_image_url = result.get("secure_url")
+        except Exception as e:
+            return jsonify({"error": f"Image upload failed: {str(e)}"}), 500
 
     complaint = db.complaints.find_one({"_id": ObjectId(complaint_id)})
     if not complaint:
