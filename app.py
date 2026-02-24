@@ -1,0 +1,170 @@
+from flask import Flask, jsonify, send_from_directory, request
+from flask_cors import CORS
+from dotenv import load_dotenv
+import os
+
+# ================= ENV =================
+load_dotenv()
+
+# ================= IMPORT ROUTES =================
+from routes.auth_routes import auth_bp
+from routes.complaint_routes import complaint_bp        # 🔐 User complaints
+from routes.complaints import complaints_bp             # 🌍 Public complaints
+from routes.user_routes import user_bp
+from routes.analytics_routes import analytics_bp        # 📊 Analytics
+from routes.officer_routes import officer_bp            # 👮 Officer module
+from routes.authorities_routes import authorities_bp    # 🏛️ Authorities/Officers public listing
+from routes.chatbot_routes import chatbot_bp            # 🤖 Chatbot (NagrikBot)
+from routes.fcm_routes import fcm_bp                    # 🔥 FCM Notifications (NEW)
+
+# ================= DATABASE =================
+from utils.database import init_db
+
+# ================= APP INIT =================
+app = Flask(__name__)
+
+# ================= CONFIG =================
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "your-secret-key")
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "your-jwt-secret")
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB uploads
+
+# ================= CORS FIX FOR CHROME =================
+CORS(
+    app,
+    resources={
+        r"/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "expose_headers": ["Content-Type", "Authorization"],
+        }
+    },
+    supports_credentials=False,
+    send_wildcard=True,
+    always_send=True,
+)
+
+# ================= HANDLE OPTIONS (PREFLIGHT) =================
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+        response.headers.add("Access-Control-Max-Age", "3600")
+        return response, 200
+
+# ================= DEBUG LOGGING =================
+@app.before_request
+def log_request():
+    print(f"\n{'='*70}")
+    print(f"📥 {request.method} {request.path}")
+    print(f"   Origin: {request.headers.get('Origin', 'None')}")
+    if request.headers.get('Authorization'):
+        print(f"   Auth: {request.headers.get('Authorization')[:30]}...")
+    print(f"{'='*70}")
+
+@app.after_request
+def add_cors_headers(response):
+    if not response.headers.get('Access-Control-Allow-Origin'):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    if not response.headers.get('Access-Control-Allow-Methods'):
+        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+    if not response.headers.get('Access-Control-Allow-Headers'):
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+
+    print(f"📤 Response: {response.status}")
+    print(f"   CORS: {response.headers.get('Access-Control-Allow-Origin')}")
+    return response
+
+# ================= DB INIT =================
+init_db()
+
+# ================= REGISTER BLUEPRINTS =================
+app.register_blueprint(auth_bp, url_prefix="/api/auth")
+
+# 👤 USER
+app.register_blueprint(complaint_bp, url_prefix="/api/complaints")
+app.register_blueprint(user_bp, url_prefix="/api/users")
+
+# 🌍 PUBLIC
+app.register_blueprint(complaints_bp, url_prefix="/api/public")
+
+# 📊 ANALYTICS
+app.register_blueprint(analytics_bp, url_prefix="/api/analytics")
+
+# 👮 OFFICER MODULE
+app.register_blueprint(officer_bp, url_prefix="/api/officer")
+
+# 🏛️ AUTHORITIES (Public)
+app.register_blueprint(authorities_bp, url_prefix="/api/authorities")
+
+# 🤖 CHATBOT
+app.register_blueprint(chatbot_bp, url_prefix="/api/chatbot")
+
+# 🔥 FCM NOTIFICATIONS (NEW)
+app.register_blueprint(fcm_bp, url_prefix="/api/fcm")
+
+# ================= IMAGE SERVING =================
+@app.route("/uploads/<path:filename>")
+def serve_uploaded_files(filename):
+    upload_root = os.path.join(os.getcwd(), "uploads")
+    return send_from_directory(upload_root, filename)
+
+# ================= ROOT =================
+@app.route("/")
+def index():
+    return jsonify({
+        "message": "CityCare API is running",
+        "version": "1.0.0",
+        "modules": {
+            "auth": "/api/auth",
+            "user_complaints": "/api/complaints",
+            "public_complaints": "/api/public/complaints/all",
+            "analytics": "/api/analytics/summary",
+            "officer": "/api/officer/complaints",
+            "authorities": "/api/authorities",
+            "chatbot": "/api/chatbot/message",
+            "fcm": "/api/fcm/register-token",
+            "uploads": "/uploads/complaints/<image>.jpg"
+        }
+    })
+
+# ================= HEALTH =================
+@app.route("/health")
+def health():
+    return jsonify({"status": "healthy"})
+
+# ================= ERRORS =================
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Not found"}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Internal server error"}), 500
+
+@app.errorhandler(413)
+def file_too_large(error):
+    return jsonify({"error": "File too large. Max 16MB"}), 413
+
+# ================= RUN =================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    debug_mode = os.getenv("FLASK_DEBUG", "False") == "True"
+
+    print("\n" + "="*70)
+    print("🚀 CITYCARE BACKEND - WITH FIREBASE NOTIFICATIONS")
+    print("="*70)
+    print(f"✅ CORS: Enabled for all origins")
+    print(f"✅ Preflight: OPTIONS requests handled")
+    print(f"✅ Firebase: Notifications enabled")
+    print(f"✅ Running on Port: {port}")
+    print("="*70 + "\n")
+
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=debug_mode,
+    )

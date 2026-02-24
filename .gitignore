@@ -1,0 +1,7 @@
+.env
+firebase-service-account.json
+packages/firebase-service-account.json
+__pycache__/
+*.pyc
+uploads/
+.idea/
