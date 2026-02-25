@@ -1,4 +1,4 @@
-# utils/urgency_engine_enhanced.py
+
 
 import requests
 import base64
@@ -8,24 +8,13 @@ from typing import Optional, List, Dict, Set
 from collections import defaultdict
 
 class UrgencyAnalyzer:
-    """
-    Advanced NLP-based urgency analyzer with:
-    - Word tokenization and stemming
-    - Comprehensive keyword database (10,000+ words)
-    - Synonym matching
-    - Context-aware scoring
-    - Image analysis integration
-    """
 
     def __init__(self):
         self.keyword_db = self._build_keyword_database()
         self.stemming_rules = self._build_stemming_rules()
 
     def _build_keyword_database(self) -> Dict[str, Dict[str, any]]:
-        """
-        Comprehensive keyword database with severity levels and categories
-        Returns: {word: {severity: int, category: str, boost: int}}
-        """
+
 
         keywords = {
             # ===== CRITICAL (90-100) - LIFE THREATENING =====

@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from bson import ObjectId
 from datetime import datetime
 from utils.database import get_db
-from utils.urgency_engine import calculate_urgency   # ✅ FIX 1: Enhanced engine import
+from utils.ml_model import predict_score             # ✅ ML Model
 from utils.firebase_service import firebase_service
 from middleware.auth_middleware import token_required
 import cloudinary.uploader
@@ -16,11 +16,11 @@ def submit_complaint(current_user):
     db = get_db()
 
     try:
-        category = request.form.get("category")
+        category    = request.form.get("category")
         description = request.form.get("description")
-        location = request.form.get("location")
-        latitude = request.form.get("latitude")
-        longitude = request.form.get("longitude")
+        location    = request.form.get("location")
+        latitude    = request.form.get("latitude")
+        longitude   = request.form.get("longitude")
 
         if not all([category, description, location]):
             return jsonify({"error": "Missing required fields"}), 400
@@ -37,35 +37,31 @@ def submit_complaint(current_user):
                 )
                 image_url = result.get("secure_url")
 
-        # ✅ FIX 2: image_url pass karo (Cloudinary URL)
-        urgency = calculate_urgency(
-            description=description,
-            category=category,
-            image_url=image_url
-        )
+        # ✅ ML MODEL — urgency score predict karo
+        urgency = predict_score(description)
 
         complaint = {
-            "user_id": ObjectId(current_user["user_id"]),
-            "category": category,
+            "user_id"    : ObjectId(current_user["user_id"]),
+            "category"   : category,
             "description": description,
-            "location": location,
-            "latitude": float(latitude) if latitude else None,
-            "longitude": float(longitude) if longitude else None,
-            "image_url": image_url,
-            "status": "pending",
-            "urgency": urgency,
-            "created_at": datetime.utcnow(),
-            "timeline": [
+            "location"   : location,
+            "latitude"   : float(latitude) if latitude else None,
+            "longitude"  : float(longitude) if longitude else None,
+            "image_url"  : image_url,
+            "status"     : "pending",
+            "urgency"    : urgency,
+            "created_at" : datetime.utcnow(),
+            "timeline"   : [
                 {
                     "status": "Submitted",
-                    "date": datetime.utcnow().isoformat(),
-                    "done": True,
-                    "by": "User"
+                    "date"  : datetime.utcnow().isoformat(),
+                    "done"  : True,
+                    "by"    : "User"
                 }
             ]
         }
 
-        result = db.complaints.insert_one(complaint)
+        result       = db.complaints.insert_one(complaint)
         complaint_id = str(result.inserted_id)
 
         # 🔥 NOTIFY OFFICERS
@@ -90,9 +86,9 @@ def submit_complaint(current_user):
             print(f"Notification error: {e}")
 
         return jsonify({
-            "message": "Complaint submitted successfully",
+            "message"     : "Complaint submitted successfully",
             "complaint_id": complaint_id,
-            "urgency": urgency
+            "urgency"     : urgency
         }), 201
 
     except Exception as e:
@@ -116,19 +112,19 @@ def get_complaint(current_user, complaint_id):
             return jsonify({"error": "Unauthorized"}), 403
 
         formatted = {
-            "id": str(complaint["_id"]),
-            "category": complaint.get("category", ""),
-            "description": complaint.get("description", ""),
-            "location": complaint.get("location", ""),
-            "status": complaint.get("status", "pending"),
-            "urgency": complaint.get("urgency", 0),
-            "imageUrl": complaint.get("image_url", ""),
-            "proofImageUrl": complaint.get("proof_image_url", ""),
-            "feedbackRating": complaint.get("feedback_rating"),
+            "id"             : str(complaint["_id"]),
+            "category"       : complaint.get("category", ""),
+            "description"    : complaint.get("description", ""),
+            "location"       : complaint.get("location", ""),
+            "status"         : complaint.get("status", "pending"),
+            "urgency"        : complaint.get("urgency", 0),
+            "imageUrl"       : complaint.get("image_url", ""),
+            "proofImageUrl"  : complaint.get("proof_image_url", ""),
+            "feedbackRating" : complaint.get("feedback_rating"),
             "feedbackComment": complaint.get("feedback_comment"),
-            "createdAt": complaint["created_at"].isoformat(),
-            "resolvedAt": complaint.get("resolved_at").isoformat() if complaint.get("resolved_at") else None,
-            "timeline": complaint.get("timeline", [])
+            "createdAt"      : complaint["created_at"].isoformat(),
+            "resolvedAt"     : complaint.get("resolved_at").isoformat() if complaint.get("resolved_at") else None,
+            "timeline"       : complaint.get("timeline", [])
         }
 
         return jsonify(formatted), 200
@@ -151,19 +147,19 @@ def get_my_complaints(current_user):
         formatted = []
         for c in complaints:
             formatted.append({
-                "id": str(c["_id"]),
-                "category": c.get("category", ""),
-                "description": c.get("description", ""),
-                "location": c.get("location", ""),
-                "status": c.get("status", "pending"),
-                "urgency": c.get("urgency", 0),
-                "imageUrl": c.get("image_url", ""),
-                "proofImageUrl": c.get("proof_image_url", ""),
-                "feedbackRating": c.get("feedback_rating"),
+                "id"             : str(c["_id"]),
+                "category"       : c.get("category", ""),
+                "description"    : c.get("description", ""),
+                "location"       : c.get("location", ""),
+                "status"         : c.get("status", "pending"),
+                "urgency"        : c.get("urgency", 0),
+                "imageUrl"       : c.get("image_url", ""),
+                "proofImageUrl"  : c.get("proof_image_url", ""),
+                "feedbackRating" : c.get("feedback_rating"),
                 "feedbackComment": c.get("feedback_comment"),
-                "createdAt": c["created_at"].isoformat(),
-                "resolvedAt": c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
-                "timeline": c.get("timeline", [])
+                "createdAt"      : c["created_at"].isoformat(),
+                "resolvedAt"     : c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
+                "timeline"       : c.get("timeline", [])
             })
 
         return jsonify({"complaints": formatted}), 200
@@ -186,19 +182,19 @@ def get_all_complaints(current_user):
         formatted = []
         for c in complaints:
             formatted.append({
-                "id": str(c["_id"]),
-                "category": c.get("category", ""),
-                "description": c.get("description", ""),
-                "location": c.get("location", ""),
-                "status": c.get("status", "pending"),
-                "urgency": c.get("urgency", 0),
-                "imageUrl": c.get("image_url", ""),
-                "proofImageUrl": c.get("proof_image_url", ""),
-                "feedbackRating": c.get("feedback_rating"),
+                "id"             : str(c["_id"]),
+                "category"       : c.get("category", ""),
+                "description"    : c.get("description", ""),
+                "location"       : c.get("location", ""),
+                "status"         : c.get("status", "pending"),
+                "urgency"        : c.get("urgency", 0),
+                "imageUrl"       : c.get("image_url", ""),
+                "proofImageUrl"  : c.get("proof_image_url", ""),
+                "feedbackRating" : c.get("feedback_rating"),
                 "feedbackComment": c.get("feedback_comment"),
-                "createdAt": c["created_at"].isoformat(),
-                "resolvedAt": c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
-                "timeline": c.get("timeline", [])
+                "createdAt"      : c["created_at"].isoformat(),
+                "resolvedAt"     : c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
+                "timeline"       : c.get("timeline", [])
             })
 
         return jsonify({"complaints": formatted}), 200
