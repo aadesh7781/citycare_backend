@@ -3,6 +3,7 @@ from bson import ObjectId
 from datetime import datetime
 from utils.database import get_db
 from utils.ml_model import predict_score             # ✅ ML Model
+from utils.image_analyzer import analyze_complaint_image  # ✅ Gemini Vision
 from utils.firebase_service import firebase_service
 from middleware.auth_middleware import token_required
 import cloudinary.uploader
@@ -37,8 +38,21 @@ def submit_complaint(current_user):
                 )
                 image_url = result.get("secure_url")
 
-        # ✅ ML MODEL — urgency score predict karo
-        urgency = predict_score(description)
+        # ✅ ML MODEL — text se urgency score
+        text_score   = predict_score(description)
+
+        # ✅ GEMINI VISION — image se boost (agar image hai)
+        image_boost  = 0
+        image_note   = ""
+        if image_url:
+            image_result = analyze_complaint_image(image_url)
+            image_boost  = image_result["boost"]
+            image_note   = image_result["analysis"]
+
+        # ✅ FINAL SCORE — text + image combined
+        urgency = max(0, min(100, text_score + image_boost))
+
+        print(f"📊 Text={text_score} + Image={image_boost} → Final={urgency}")
 
         complaint = {
             "user_id"    : ObjectId(current_user["user_id"]),
