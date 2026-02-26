@@ -215,5 +215,3 @@ def get_all_complaints(current_user):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-text_score = predict_score(description)
-print(f"🔍 Description: '{description}' → Score: {text_score}")
