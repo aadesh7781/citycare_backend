@@ -14,4 +14,4 @@ cloudinary==1.39.0
 numpy==1.26.4
 torch
 scikit-learn
-google-generativeai
+google-genai

@@ -1,14 +1,14 @@
 # utils/image_analyzer.py
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import requests
 import os
 from PIL import Image
 from io import BytesIO
 
-# ── Configure Gemini ──────────────────────────────────────────────
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
-gemini = genai.GenerativeModel("gemini-1.5-flash")
+# ── Configure ─────────────────────────────────────────────────────
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
 
 PROMPT = """
 You are an AI analyzing a civic complaint image for a municipal system.
@@ -26,10 +26,6 @@ Scoring guide:
 """
 
 def analyze_complaint_image(image_url: str) -> dict:
-    """
-    Takes Cloudinary image URL, analyzes with Gemini Vision.
-    Returns boost (0-30) and analysis text.
-    """
     if not image_url:
         return {"boost": 0, "analysis": "No image", "severity": "none"}
 
@@ -39,8 +35,11 @@ def analyze_complaint_image(image_url: str) -> dict:
         image = Image.open(BytesIO(resp.content))
 
         # Send to Gemini
-        result = gemini.generate_content([PROMPT, image])
-        text   = result.text.strip()
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=[PROMPT, image]
+        )
+        text = response.text.strip()
 
         # Parse response
         boost    = 0
