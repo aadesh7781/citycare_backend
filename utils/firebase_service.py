@@ -4,20 +4,44 @@ Handles sending push notifications to Flutter app
 """
 import os
 import json
+import tempfile
 import requests
 from typing import List, Dict, Optional
 from datetime import datetime
 
 
+def _write_firebase_credentials() -> Optional[str]:
+    """Write Firebase credentials from env var to a temp file, return path."""
+    firebase_json = os.environ.get("FIREBASE_JSON")
+    if firebase_json:
+        try:
+            tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+            tmp.write(firebase_json)
+            tmp.close()
+            print("✅ Firebase credentials loaded from FIREBASE_JSON env var")
+            return tmp.name
+        except Exception as e:
+            print(f"❌ Error writing Firebase credentials from env var: {e}")
+
+    # Fallback to local file
+    fallback = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase-service-account.json")
+    if os.path.exists(fallback):
+        print(f"✅ Firebase credentials loaded from file: {fallback}")
+        return fallback
+
+    print("❌ No Firebase credentials found (FIREBASE_JSON env var or file)")
+    return None
+
+
 class FirebaseService:
     def __init__(self):
-        self.credentials_path = os.getenv(
-            "FIREBASE_CREDENTIALS_PATH",
-            "firebase-service-account.json"
-        )
+        self.credentials_path = _write_firebase_credentials()
         self.fcm_url = "https://fcm.googleapis.com/v1/projects/{project_id}/messages:send"
 
     def _get_access_token(self) -> Optional[str]:
+        if not self.credentials_path:
+            print("❌ No Firebase credentials available")
+            return None
         try:
             from google.auth.transport.requests import Request
             from google.oauth2 import service_account
@@ -37,6 +61,8 @@ class FirebaseService:
             return None
 
     def _get_project_id(self) -> Optional[str]:
+        if not self.credentials_path:
+            return None
         try:
             with open(self.credentials_path, 'r') as f:
                 return json.load(f).get('project_id')
@@ -53,12 +79,8 @@ class FirebaseService:
     ) -> bool:
         """
         Send FCM notification with BOTH notification and data payloads.
-
-        CRITICAL FIX:
         - notification payload: Makes it appear in system tray automatically
         - data payload: Allows in-app handling and custom actions
-
-        This ensures notifications show up even if the Flutter app has issues.
         """
         if not token:
             print("⚠️ No FCM token provided")

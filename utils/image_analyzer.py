@@ -36,7 +36,7 @@ def analyze_complaint_image(image_url: str) -> dict:
 
         # Send to Gemini
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             contents=[PROMPT, image]
         )
         text = response.text.strip()
