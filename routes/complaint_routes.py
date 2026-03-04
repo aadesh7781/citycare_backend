@@ -78,31 +78,74 @@ def submit_complaint(current_user):
         result       = db.complaints.insert_one(complaint)
         complaint_id = str(result.inserted_id)
 
-        # 🔥 NOTIFY OFFICERS
-        try:
-            officers = list(db.users.find(
-                {"role": "officer", "fcm_token": {"$exists": True, "$ne": None}},
-                {"fcm_token": 1}
-            ))
+        # ── AUTO-ASSIGN officer by department ──────────────────────
+        CATEGORY_DEPT = {
+            "roads": "roads", "road": "roads", "pothole": "roads",
+            "water": "water",
+            "drainage": "drainage", "flood": "drainage",
+            "electricity": "electricity", "power": "electricity", "streetlight": "electricity",
+            "sanitation": "sanitation", "garbage": "sanitation", "waste": "sanitation",
+            "safety": "safety", "crime": "safety",
+            "environment": "environment", "pollution": "environment",
+            "health": "health",
+            "infrastructure": "infrastructure",
+            "transport": "transport",
+        }
 
-            officer_tokens = [o["fcm_token"] for o in officers]
+        dept = CATEGORY_DEPT.get(category.lower().strip(), None)
+        assigned_officer_info = None
 
-            if officer_tokens:
-                firebase_service.notify_new_complaint(
-                    officer_tokens=officer_tokens,
-                    complaint_id=complaint_id,
-                    category=category,
-                    location=location,
-                    urgency=urgency
+        if dept:
+            dept_officers = list(db.users.find({"role": "officer", "department": dept}))
+            if dept_officers:
+                def officer_load(o):
+                    return db.complaints.count_documents({
+                        "assigned_officer.officer_id": str(o["_id"]),
+                        "status": {"$in": ["pending", "in_progress"]}
+                    })
+                best_officer = min(dept_officers, key=officer_load)
+                assigned_officer_info = {
+                    "officer_id"  : str(best_officer["_id"]),
+                    "name"        : best_officer.get("name", ""),
+                    "badge_number": best_officer.get("badge_number", ""),
+                    "department"  : best_officer.get("department", ""),
+                }
+                db.complaints.update_one(
+                    {"_id": result.inserted_id},
+                    {"$set": {"assigned_officer": assigned_officer_info, "status": "in_progress"},
+                     "$push": {"timeline": {"status": "Assigned", "date": datetime.utcnow().isoformat(), "done": True, "by": f"Auto → {best_officer.get('name', '')}"}}}
                 )
 
+        # 🔥 NOTIFY OFFICERS
+        try:
+            if assigned_officer_info:
+                assigned_doc = db.users.find_one({"_id": ObjectId(assigned_officer_info["officer_id"])})
+                if assigned_doc and assigned_doc.get("fcm_token"):
+                    firebase_service.notify_new_complaint(
+                        officer_tokens=[assigned_doc["fcm_token"]],
+                        complaint_id=complaint_id, category=category,
+                        location=location, urgency=urgency
+                    )
+            else:
+                officers = list(db.users.find(
+                    {"role": "officer", "fcm_token": {"$exists": True, "$ne": None}},
+                    {"fcm_token": 1}
+                ))
+                officer_tokens = [o["fcm_token"] for o in officers]
+                if officer_tokens:
+                    firebase_service.notify_new_complaint(
+                        officer_tokens=officer_tokens,
+                        complaint_id=complaint_id, category=category,
+                        location=location, urgency=urgency
+                    )
         except Exception as e:
             print(f"Notification error: {e}")
 
         return jsonify({
-            "message"     : "Complaint submitted successfully",
-            "complaint_id": complaint_id,
-            "urgency"     : urgency
+            "message"          : "Complaint submitted successfully",
+            "complaint_id"     : complaint_id,
+            "urgency"          : urgency,
+            "assigned_officer" : assigned_officer_info,
         }), 201
 
     except Exception as e:
@@ -215,3 +258,149 @@ def get_all_complaints(current_user):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════
+#  RESOLUTION CONFIRM / REJECT  (by citizen)
+# ═══════════════════════════════════════════════════════
+
+@complaint_bp.route("/<complaint_id>/confirm-resolution", methods=["POST"])
+@token_required
+def confirm_resolution(current_user, complaint_id):
+    """
+    User confirms OR rejects officer's resolution proof.
+    action = "confirm" → complaint closed
+    action = "reject"  → complaint reopened, officer notified
+    """
+    db   = get_db()
+    data = request.get_json() or {}
+
+    action = data.get("action")  # "confirm" or "reject"
+    reason = data.get("reason", "")
+
+    if action not in ["confirm", "reject"]:
+        return jsonify({"error": "action must be confirm or reject"}), 400
+
+    try:
+        complaint = db.complaints.find_one({"_id": ObjectId(complaint_id)})
+        if not complaint:
+            return jsonify({"error": "Complaint not found"}), 404
+
+        # Only the complaint owner can confirm
+        if str(complaint.get("user_id")) != current_user["user_id"]:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        # Must be in resolved state with proof
+        if complaint.get("status") != "resolved":
+            return jsonify({"error": "Complaint is not in resolved state"}), 400
+
+        if not complaint.get("proof_image_url"):
+            return jsonify({"error": "No proof image uploaded by officer"}), 400
+
+        now = datetime.utcnow()
+
+        if action == "confirm":
+            db.complaints.update_one(
+                {"_id": ObjectId(complaint_id)},
+                {"$set": {
+                    "resolution_confirmed"    : True,
+                    "resolution_confirmed_by" : current_user["user_id"],
+                    "resolution_confirmed_at" : now,
+                    "status"                  : "closed",
+                },
+                    "$push": {"timeline": {
+                        "status": "Closed",
+                        "date"  : now.isoformat(),
+                        "done"  : True,
+                        "by"    : "Citizen Confirmed"
+                    }}}
+            )
+            return jsonify({"message": "Resolution confirmed. Complaint closed. ✅"}), 200
+
+        else:  # reject
+            reopen_count = complaint.get("reopened_count", 0) + 1
+
+            db.complaints.update_one(
+                {"_id": ObjectId(complaint_id)},
+                {"$set": {
+                    "status"         : "in_progress",
+                    "proof_image_url": None,
+                    "reopened_count" : reopen_count,
+                    "reopened_reason": reason,
+                    "reopened_at"    : now,
+                },
+                    "$push": {"timeline": {
+                        "status": "Reopened",
+                        "date"  : now.isoformat(),
+                        "done"  : True,
+                        "by"    : f"Citizen Rejected: {reason}"
+                    }}}
+            )
+
+            # Notify officer
+            try:
+                assigned = complaint.get("assigned_officer", {})
+                if assigned.get("officer_id"):
+                    officer = db.users.find_one({"_id": ObjectId(assigned["officer_id"])})
+                    if officer and officer.get("fcm_token"):
+                        from utils.firebase_service import firebase_service
+                        firebase_service.send_notification(
+                            token  = officer["fcm_token"],
+                            title  = "Resolution Rejected ❌",
+                            body   = f"Citizen rejected your resolution. Reason: {reason or 'Not specified'}",
+                            data   = {"complaint_id": complaint_id, "type": "resolution_rejected"}
+                        )
+            except Exception as e:
+                print(f"Notification error: {e}")
+
+            return jsonify({"message": "Resolution rejected. Complaint reopened.", "reopen_count": reopen_count}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════
+#  AUTO CONFIRM  (cron-style — call from admin or scheduler)
+#  Auto-confirms resolutions older than 48 hours
+# ═══════════════════════════════════════════════════════
+
+@complaint_bp.route("/auto-confirm-resolutions", methods=["POST"])
+@token_required
+def auto_confirm_resolutions(current_user):
+    if current_user.get("role") != "admin":
+        return jsonify({"error": "Admin only"}), 403
+
+    db  = get_db()
+    now = datetime.utcnow()
+
+    from datetime import timedelta
+    cutoff = now - timedelta(hours=48)
+
+    # Find resolved complaints with proof, not yet confirmed, older than 48h
+    pending = list(db.complaints.find({
+        "status"              : "resolved",
+        "proof_image_url"     : {"$ne": None},
+        "resolution_confirmed": {"$ne": True},
+        "resolved_at"         : {"$lt": cutoff}
+    }))
+
+    count = 0
+    for c in pending:
+        db.complaints.update_one(
+            {"_id": c["_id"]},
+            {"$set": {
+                "resolution_confirmed"   : True,
+                "resolution_confirmed_by": "auto",
+                "resolution_confirmed_at": now,
+                "status"                 : "closed",
+            },
+                "$push": {"timeline": {
+                    "status": "Auto-Closed",
+                    "date"  : now.isoformat(),
+                    "done"  : True,
+                    "by"    : "System (48hr auto-confirm)"
+                }}}
+        )
+        count += 1
+
+    return jsonify({"message": f"Auto-confirmed {count} complaints"}), 200

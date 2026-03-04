@@ -21,6 +21,7 @@ from routes.officer_routes import officer_bp
 from routes.authorities_routes import authorities_bp
 from routes.chatbot_routes import chatbot_bp
 from routes.fcm_routes import fcm_bp
+from routes.admin_routes import admin_bp
 
 # ================= DATABASE =================
 from utils.database import init_db
@@ -102,6 +103,7 @@ app.register_blueprint(officer_bp, url_prefix="/api/officer")
 app.register_blueprint(authorities_bp, url_prefix="/api/authorities")
 app.register_blueprint(chatbot_bp, url_prefix="/api/chatbot")
 app.register_blueprint(fcm_bp, url_prefix="/api/fcm")
+app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
 # ================= IMAGE SERVING (OLD - KEEPING FOR SAFETY) =================
 @app.route("/uploads/<path:filename>")
