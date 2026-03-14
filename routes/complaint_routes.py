@@ -168,20 +168,24 @@ def get_complaint(current_user, complaint_id):
                 current_user.get("role") != "officer"):
             return jsonify({"error": "Unauthorized"}), 403
 
+        assigned = complaint.get("assigned_officer", {})
+
         formatted = {
-            "id"             : str(complaint["_id"]),
-            "category"       : complaint.get("category", ""),
-            "description"    : complaint.get("description", ""),
-            "location"       : complaint.get("location", ""),
-            "status"         : complaint.get("status", "pending"),
-            "urgency"        : complaint.get("urgency", 0),
-            "imageUrl"       : complaint.get("image_url", ""),
-            "proofImageUrl"  : complaint.get("proof_image_url", ""),
-            "feedbackRating" : complaint.get("feedback_rating"),
-            "feedbackComment": complaint.get("feedback_comment"),
-            "createdAt"      : complaint["created_at"].isoformat(),
-            "resolvedAt"     : complaint.get("resolved_at").isoformat() if complaint.get("resolved_at") else None,
-            "timeline"       : complaint.get("timeline", [])
+            "id"                  : str(complaint["_id"]),
+            "category"            : complaint.get("category", ""),
+            "description"         : complaint.get("description", ""),
+            "location"            : complaint.get("location", ""),
+            "status"              : complaint.get("status", "pending"),
+            "urgency"             : complaint.get("urgency", 0),
+            "imageUrl"            : complaint.get("image_url", ""),
+            "proofImageUrl"       : complaint.get("proof_image_url", ""),
+            "feedbackRating"      : complaint.get("feedback_rating"),
+            "feedbackComment"     : complaint.get("feedback_comment"),
+            "createdAt"           : complaint["created_at"].isoformat(),
+            "resolvedAt"          : complaint.get("resolved_at").isoformat() if complaint.get("resolved_at") else None,
+            "timeline"            : complaint.get("timeline", []),
+            "assignedOfficer"     : assigned if assigned else None,
+            "resolutionConfirmed" : complaint.get("resolution_confirmed", False),
         }
 
         return jsonify(formatted), 200
@@ -203,20 +207,23 @@ def get_my_complaints(current_user):
 
         formatted = []
         for c in complaints:
+            assigned = c.get("assigned_officer", {})
             formatted.append({
-                "id"             : str(c["_id"]),
-                "category"       : c.get("category", ""),
-                "description"    : c.get("description", ""),
-                "location"       : c.get("location", ""),
-                "status"         : c.get("status", "pending"),
-                "urgency"        : c.get("urgency", 0),
-                "imageUrl"       : c.get("image_url", ""),
-                "proofImageUrl"  : c.get("proof_image_url", ""),
-                "feedbackRating" : c.get("feedback_rating"),
-                "feedbackComment": c.get("feedback_comment"),
-                "createdAt"      : c["created_at"].isoformat(),
-                "resolvedAt"     : c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
-                "timeline"       : c.get("timeline", [])
+                "id"                  : str(c["_id"]),
+                "category"            : c.get("category", ""),
+                "description"         : c.get("description", ""),
+                "location"            : c.get("location", ""),
+                "status"              : c.get("status", "pending"),
+                "urgency"             : c.get("urgency", 0),
+                "imageUrl"            : c.get("image_url", ""),
+                "proofImageUrl"       : c.get("proof_image_url", ""),
+                "feedbackRating"      : c.get("feedback_rating"),
+                "feedbackComment"     : c.get("feedback_comment"),
+                "createdAt"           : c["created_at"].isoformat(),
+                "resolvedAt"          : c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
+                "timeline"            : c.get("timeline", []),
+                "assignedOfficer"     : assigned if assigned else None,
+                "resolutionConfirmed" : c.get("resolution_confirmed", False),
             })
 
         return jsonify({"complaints": formatted}), 200
@@ -238,20 +245,23 @@ def get_all_complaints(current_user):
 
         formatted = []
         for c in complaints:
+            assigned = c.get("assigned_officer", {})
             formatted.append({
-                "id"             : str(c["_id"]),
-                "category"       : c.get("category", ""),
-                "description"    : c.get("description", ""),
-                "location"       : c.get("location", ""),
-                "status"         : c.get("status", "pending"),
-                "urgency"        : c.get("urgency", 0),
-                "imageUrl"       : c.get("image_url", ""),
-                "proofImageUrl"  : c.get("proof_image_url", ""),
-                "feedbackRating" : c.get("feedback_rating"),
-                "feedbackComment": c.get("feedback_comment"),
-                "createdAt"      : c["created_at"].isoformat(),
-                "resolvedAt"     : c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
-                "timeline"       : c.get("timeline", [])
+                "id"                  : str(c["_id"]),
+                "category"            : c.get("category", ""),
+                "description"         : c.get("description", ""),
+                "location"            : c.get("location", ""),
+                "status"              : c.get("status", "pending"),
+                "urgency"             : c.get("urgency", 0),
+                "imageUrl"            : c.get("image_url", ""),
+                "proofImageUrl"       : c.get("proof_image_url", ""),
+                "feedbackRating"      : c.get("feedback_rating"),
+                "feedbackComment"     : c.get("feedback_comment"),
+                "createdAt"           : c["created_at"].isoformat(),
+                "resolvedAt"          : c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
+                "timeline"            : c.get("timeline", []),
+                "assignedOfficer"     : assigned if assigned else None,
+                "resolutionConfirmed" : c.get("resolution_confirmed", False),
             })
 
         return jsonify({"complaints": formatted}), 200

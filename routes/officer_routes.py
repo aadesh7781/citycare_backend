@@ -151,16 +151,19 @@ def get_all_complaints_for_officer(current_user):
     try:
         complaints = list(db.complaints.find().sort("urgency", -1))
         formatted = [{
-            "id": str(c["_id"]),
-            "category": c.get("category", ""),
-            "description": c.get("description", ""),
-            "location": c.get("location", ""),
-            "status": c.get("status", "pending"),
-            "urgency": c.get("urgency", 0),
-            "imageUrl": c.get("image_url", ""),
-            "createdAt": c["created_at"].isoformat(),
-            "timeline": c.get("timeline", []),
-            "assignedOfficer": c.get("assigned_officer", {})
+            "id"                 : str(c["_id"]),
+            "category"           : c.get("category", ""),
+            "description"        : c.get("description", ""),
+            "location"           : c.get("location", ""),
+            "status"             : c.get("status", "pending"),
+            "urgency"            : c.get("urgency", 0),
+            "imageUrl"           : c.get("image_url", ""),
+            "proofImageUrl"      : c.get("proof_image_url", ""),
+            "createdAt"          : c["created_at"].isoformat(),
+            "resolvedAt"         : c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
+            "timeline"           : c.get("timeline", []),
+            "assignedOfficer"    : c.get("assigned_officer", {}),
+            "resolutionConfirmed": c.get("resolution_confirmed", False),
         } for c in complaints]
 
         return jsonify({"complaints": formatted}), 200
@@ -200,7 +203,8 @@ def get_complaint_detail(current_user, complaint_id):
             "userName": user.get("name", "Unknown") if user else "Unknown",
             "userPhone": user.get("phone", "") if user else "",
             "assignedOfficer": complaint.get("assigned_officer", {}),
-            "feedback": complaint.get("feedback", None)
+            "feedback"            : complaint.get("feedback", None),
+            "resolutionConfirmed" : complaint.get("resolution_confirmed", False),
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
