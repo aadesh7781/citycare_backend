@@ -254,16 +254,23 @@ def get_complaints(current_user):
         for c in complaints:
             user = db.users.find_one({"_id": c.get("user_id")})
             result.append({
-                "id"             : str(c["_id"]),
-                "category"       : c.get("category", ""),
-                "description"    : c.get("description", ""),
-                "location"       : c.get("location", ""),
-                "status"         : c.get("status", "pending"),
-                "urgency"        : c.get("urgency", 0),
-                "imageUrl"       : c.get("image_url", ""),
-                "assignedOfficer": c.get("assigned_officer", {}),
-                "createdAt"      : c["created_at"].isoformat(),
-                "userName"       : user.get("name", "Unknown") if user else "Unknown",
+                "id"                  : str(c["_id"]),
+                "category"            : c.get("category", ""),
+                "description"         : c.get("description", ""),
+                "location"            : c.get("location", ""),
+                "status"              : c.get("status", "pending"),
+                "urgency"             : c.get("urgency", 0),
+                "imageUrl"            : c.get("image_url", ""),
+                "proofImageUrl"       : c.get("proof_image_url", ""),
+                "assignedOfficer"     : c.get("assigned_officer", {}),
+                "timeline"            : c.get("timeline", []),
+                "createdAt"           : c["created_at"].isoformat(),
+                "resolvedAt"          : c.get("resolved_at").isoformat() if c.get("resolved_at") else None,
+                "resolutionConfirmed" : c.get("resolution_confirmed", False),
+                "userName"            : user.get("name", "Unknown") if user else "Unknown",
+                "userPhone"           : user.get("phone", "") if user else "",
+                "feedbackRating"      : c.get("feedback_rating"),
+                "feedbackComment"     : c.get("feedback_comment"),
             })
         return jsonify({"complaints": result}), 200
     except Exception as e:
