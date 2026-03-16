@@ -13,7 +13,6 @@ officer_bp = Blueprint("officer", __name__)
 UPLOAD_FOLDER = "uploads/officer_proofs"
 
 
-# ================= GET ALL OFFICERS =================
 @officer_bp.route("/all", methods=["GET"])
 @token_required
 def get_all_officers(current_user):

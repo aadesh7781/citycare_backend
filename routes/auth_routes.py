@@ -13,7 +13,6 @@ auth_bp = Blueprint('auth', __name__)
 JWT_SECRET = os.getenv('JWT_SECRET_KEY', 'citycare-secret')  # ✅ fallback
 
 
-# ================= TOKEN =================
 def generate_token(user):
     payload = {
         'user_id': str(user['_id']),
@@ -28,7 +27,7 @@ def generate_token(user):
     return token if isinstance(token, str) else token.decode('utf-8')
 
 
-# ================= PASSWORD =================
+
 def hash_password(password: str):
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 
@@ -37,7 +36,7 @@ def verify_password(password: str, hashed: bytes):
     return bcrypt.checkpw(password.encode('utf-8'), hashed)
 
 
-# ================= REGISTER =================
+
 @auth_bp.route('/register', methods=['POST'])
 def register():
     # Support both JSON and multipart/form-data (for document upload)
@@ -139,7 +138,7 @@ def login():
     }), 200
 
 
-# ================= CURRENT USER =================
+
 @auth_bp.route('/me', methods=['GET'])
 @token_required
 def me(current_user):
@@ -153,8 +152,7 @@ def me(current_user):
     user_id = ObjectId(user['_id'])
     user.pop('password')
 
-    # 🆕 Calculate real-time statistics from complaints collection
-    # This ensures the profile page always shows current, accurate numbers
+
     complaints_submitted = db.complaints.count_documents({'user_id': user_id})
     complaints_resolved = db.complaints.count_documents({'user_id': user_id, 'status': 'resolved'})
 

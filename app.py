@@ -8,10 +8,8 @@ import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 
-# ================= ENV =================
 load_dotenv()
 
-# ================= IMPORT ROUTES =================
 from routes.auth_routes import auth_bp
 from routes.complaint_routes import complaint_bp
 from routes.complaints import complaints_bp
@@ -23,10 +21,8 @@ from routes.chatbot_routes import chatbot_bp
 from routes.fcm_routes import fcm_bp
 from routes.admin_routes import admin_bp
 
-# ================= DATABASE =================
 from utils.database import init_db
 
-# ================= APP INIT =================
 app = Flask(__name__)
 
 # ================= CLOUDINARY CONFIG =================
@@ -37,12 +33,10 @@ cloudinary.config(
     secure=True
 )
 
-# ================= CONFIG =================
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "your-secret-key")
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "your-jwt-secret")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
-# ================= CORS =================
 CORS(
     app,
     resources={

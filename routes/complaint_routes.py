@@ -49,7 +49,7 @@ def submit_complaint(current_user):
             image_boost  = image_result["boost"]
             image_note   = image_result["analysis"]
 
-        # ✅ FINAL SCORE — text + image combined
+
         urgency = max(0, min(100, text_score + image_boost))
 
         print(f"📊 Text={text_score} + Image={image_boost} → Final={urgency}")
@@ -270,9 +270,7 @@ def get_all_complaints(current_user):
         return jsonify({"error": str(e)}), 500
 
 
-# ═══════════════════════════════════════════════════════
-#  RESOLUTION CONFIRM / REJECT  (by citizen)
-# ═══════════════════════════════════════════════════════
+
 
 @complaint_bp.route("/<complaint_id>/confirm-resolution", methods=["POST"])
 @token_required
@@ -369,10 +367,7 @@ def confirm_resolution(current_user, complaint_id):
         return jsonify({"error": str(e)}), 500
 
 
-# ═══════════════════════════════════════════════════════
-#  AUTO CONFIRM  (cron-style — call from admin or scheduler)
-#  Auto-confirms resolutions older than 48 hours
-# ═══════════════════════════════════════════════════════
+
 
 @complaint_bp.route("/auto-confirm-resolutions", methods=["POST"])
 @token_required
@@ -386,7 +381,6 @@ def auto_confirm_resolutions(current_user):
     from datetime import timedelta
     cutoff = now - timedelta(hours=48)
 
-    # Find resolved complaints with proof, not yet confirmed, older than 48h
     pending = list(db.complaints.find({
         "status"              : "resolved",
         "proof_image_url"     : {"$ne": None},

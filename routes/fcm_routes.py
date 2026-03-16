@@ -8,14 +8,7 @@ fcm_bp = Blueprint("fcm", __name__)
 @fcm_bp.route("/register-token", methods=["POST"])
 @token_required
 def register_fcm_token(current_user):
-    """
-    Register or update FCM device token for push notifications
 
-    Expected body:
-    {
-        "fcm_token": "device_fcm_token_here"
-    }
-    """
     db = get_db()
 
     try:
@@ -54,9 +47,7 @@ def register_fcm_token(current_user):
 @fcm_bp.route("/unregister-token", methods=["POST"])
 @token_required
 def unregister_fcm_token(current_user):
-    """
-    Unregister FCM token (when user logs out)
-    """
+
     db = get_db()
 
     try:

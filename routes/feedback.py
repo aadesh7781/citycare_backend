@@ -19,14 +19,7 @@ def allowed_file(filename):
 @feedback_bp.route('/api/complaints/<complaint_id>/feedback', methods=['POST'])
 # @token_required  # Uncomment when auth is set up
 def submit_feedback(complaint_id):
-    """
-    Submit user feedback for a resolved complaint
-    Expected JSON body:
-    {
-        "rating": 1-5,
-        "comment": "optional feedback comment"
-    }
-    """
+
     try:
         # Get request data
         data = request.get_json()
@@ -84,13 +77,9 @@ def submit_feedback(complaint_id):
         return jsonify({'error': str(e)}), 500
 
 
-# Upload proof image for resolved complaint (by officer)
 @feedback_bp.route('/api/complaints/<complaint_id>/proof-image', methods=['POST'])
-# @token_required  # Uncomment when auth is set up
 def upload_proof_image(complaint_id):
-    """
-    Upload proof/after image for resolved complaint (typically by officer)
-    """
+
     try:
         # Check if image file is present
         if 'proof_image' not in request.files:
@@ -145,9 +134,7 @@ def upload_proof_image(complaint_id):
 @feedback_bp.route('/api/feedback/statistics', methods=['GET'])
 # @token_required
 def get_feedback_statistics():
-    """
-    Get overall feedback statistics
-    """
+
     try:
         from app import mongo
 
@@ -243,9 +230,7 @@ def get_complaint_feedback(complaint_id):
 
 
 def _update_officer_rating(officer_id, new_rating):
-    """
-    Helper function to update officer's average rating
-    """
+
     try:
         from app import mongo
 
@@ -270,7 +255,3 @@ def _update_officer_rating(officer_id, new_rating):
     except Exception as e:
         print(f"Error updating officer rating: {e}")
 
-
-# Register blueprint in your main app.py:
-# from routes.feedback import feedback_bp
-# app.register_blueprint(feedback_bp)

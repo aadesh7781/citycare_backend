@@ -1,138 +1,112 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from utils.database import get_db
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 analytics_bp = Blueprint("analytics", __name__)
 
 
+def _date_filter(period: str) -> dict:
+    """Return MongoDB date filter based on period string."""
+    now = datetime.now(timezone.utc)
+    if period == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "week":
+        start = now - timedelta(days=7)
+    elif period == "month":
+        start = now - timedelta(days=30)
+    else:  # "all"
+        return {}
+    return {"created_at": {"$gte": start}}
+
+
 @analytics_bp.route("/home-stats", methods=["GET"])
 def home_stats():
-    """
-    Lightweight stats for the Home Screen quick-overview cards.
-
-    Returns:
-      - today_complaints  : complaints submitted today
-      - today_resolved    : complaints resolved today
-      - resolution_rate   : % of all-time complaints that are resolved (rounded int)
-    """
     db = get_db()
-
-    # ── today boundaries (UTC) ──────────────────────────────────────────────
-    now = datetime.now(timezone.utc)
+    now         = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Today's submitted complaints
-    today_complaints = db.complaints.count_documents({
-        "created_at": {"$gte": today_start}
-    })
-
-    # Today's resolved: submitted today AND resolved today
-    today_resolved = db.complaints.count_documents({
-        "status": "resolved",
-        "created_at": {"$gte": today_start},
-        "resolved_at": {"$gte": today_start}
-    })
-
-    # Today's pending complaints
-    today_pending = db.complaints.count_documents({
-        "status": "pending",
-        "created_at": {"$gte": today_start}
-    })
-
     return jsonify({
-        "today_complaints": today_complaints,
-        "today_resolved": today_resolved,
-        "today_pending": today_pending,
+        "today_complaints": db.complaints.count_documents({"created_at": {"$gte": today_start}}),
+        "today_resolved"  : db.complaints.count_documents({"status": "resolved", "created_at": {"$gte": today_start}}),
+        "today_pending"   : db.complaints.count_documents({"status": "pending",  "created_at": {"$gte": today_start}}),
     })
 
 
 @analytics_bp.route("/summary", methods=["GET"])
 def analytics_summary():
-    db = get_db()
+    db     = get_db()
+    period = request.args.get("period", "all")   # today | week | month | all
+    dfilter = _date_filter(period)
 
-    total = db.complaints.count_documents({})
+    total       = db.complaints.count_documents(dfilter)
+    pending     = db.complaints.count_documents({**dfilter, "status": "pending"})
+    in_progress = db.complaints.count_documents({**dfilter, "status": "in_progress"})
+    resolved    = db.complaints.count_documents({**dfilter, "status": "resolved"})
+    rejected    = db.complaints.count_documents({**dfilter, "status": "rejected"})
 
-    pending = db.complaints.count_documents({"status": "pending"})
-    in_progress = db.complaints.count_documents({"status": "in_progress"})
-    resolved = db.complaints.count_documents({"status": "resolved"})
-    rejected = db.complaints.count_documents({"status": "rejected"})
-
-    # Calculate average resolution time
+    # ── Avg resolution time ──
     avg_resolution_time = "N/A"
-    resolved_complaints = list(db.complaints.find({
-        "status": "resolved",
-        "resolved_at": {"$exists": True},
-        "created_at": {"$exists": True}
-    }))
+    query = {**dfilter, "status": "resolved", "resolved_at": {"$exists": True}}
+    resolved_complaints = list(db.complaints.find(query))
 
     if resolved_complaints:
-        total_time_hours = 0
-        count = 0
-
-        for complaint in resolved_complaints:
-            created_at = complaint.get("created_at")
-            resolved_at = complaint.get("resolved_at")
-
-            if created_at and resolved_at:
-                if isinstance(created_at, str):
-                    created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                if isinstance(resolved_at, str):
-                    resolved_at = datetime.fromisoformat(resolved_at.replace('Z', '+00:00'))
-
-                time_diff = resolved_at - created_at
-                total_time_hours += time_diff.total_seconds() / 3600
+        total_hours = 0
+        count       = 0
+        for c in resolved_complaints:
+            ca = c.get("created_at")
+            ra = c.get("resolved_at")
+            if ca and ra:
+                if isinstance(ca, str):
+                    ca = datetime.fromisoformat(ca.replace('Z', '+00:00'))
+                if isinstance(ra, str):
+                    ra = datetime.fromisoformat(ra.replace('Z', '+00:00'))
+                total_hours += (ra - ca).total_seconds() / 3600
                 count += 1
-
         if count > 0:
-            avg_hours = total_time_hours / count
-
-            if avg_hours < 1:
-                avg_resolution_time = f"{int(avg_hours * 60)} mins"
-            elif avg_hours < 24:
-                avg_resolution_time = f"{avg_hours:.1f} hrs"
+            avg = total_hours / count
+            if avg < 1:
+                avg_resolution_time = f"{int(avg * 60)} mins"
+            elif avg < 24:
+                avg_resolution_time = f"{avg:.1f} hrs"
             else:
-                days = avg_hours / 24
-                avg_resolution_time = f"{days:.1f} days"
+                avg_resolution_time = f"{avg/24:.1f} days"
 
-    # Authority-wise grouping
+    # ── Category breakdown ──
+    match_stage = {"$match": dfilter} if dfilter else {"$match": {}}
     pipeline = [
-        {
-            "$group": {
-                "_id": "$category",
-                "count": {"$sum": 1}
-            }
-        }
+        match_stage,
+        {"$group": {"_id": "$category", "count": {"$sum": 1}}}
     ]
-
-    authority_data = list(db.complaints.aggregate(pipeline))
-
     authorities = [
-        {
-            "authority": a["_id"],
-            "count": a["count"]
-        }
-        for a in authority_data
+        {"authority": a["_id"], "count": a["count"]}
+        for a in db.complaints.aggregate(pipeline)
     ]
 
-    # Locations for map
+    # ── Locations ──
+    loc_query = {**dfilter}
     locations = []
-    for c in db.complaints.find({}, {"location": 1, "category": 1, "status": 1}):
-        if "," in c.get("location", ""):
-            lat, lng = c["location"].split(",")
-            locations.append({
-                "lat": float(lat.strip()),
-                "lng": float(lng.strip()),
-                "category": c["category"],
-                "status": c.get("status", "pending")
-            })
+    for c in db.complaints.find(loc_query, {"location": 1, "category": 1, "status": 1}):
+        loc = c.get("location", "")
+        if "," in loc:
+            try:
+                lat, lng = loc.split(",")
+                locations.append({
+                    "lat"     : float(lat.strip()),
+                    "lng"     : float(lng.strip()),
+                    "category": c.get("category", ""),
+                    "status"  : c.get("status", "pending"),
+                })
+            except:
+                pass
 
     return jsonify({
-        "total": total,
-        "pending": pending,
-        "in_progress": in_progress,
-        "resolved": resolved,
-        "rejected": rejected,
+        "total"              : total,
+        "pending"            : pending,
+        "in_progress"        : in_progress,
+        "resolved"           : resolved,
+        "rejected"           : rejected,
         "avg_resolution_time": avg_resolution_time,
-        "authorities": authorities,
-        "locations": locations
+        "authorities"        : authorities,
+        "locations"          : locations,
+        "period"             : period,
     })

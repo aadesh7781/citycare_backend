@@ -4,13 +4,9 @@ import re
 
 chatbot_bp = Blueprint('chatbot', __name__)
 
-# ================= CHATBOT KNOWLEDGE BASE =================
 
 class NagrikBot:
-    """
-    NagrikBot - Your friendly CityCare assistant
-    Name meaning: 'Nagrik' = Citizen in Hindi
-    """
+
 
     def __init__(self):
         self.name = "NagrikBot"

@@ -11,7 +11,7 @@ import cloudinary.uploader
 admin_bp = Blueprint("admin", __name__)
 
 
-# ── Admin Guard ───────────────────────────────────────────────────
+
 def admin_required(f):
     from functools import wraps
     @wraps(f)
@@ -23,9 +23,7 @@ def admin_required(f):
     return decorated
 
 
-# ═══════════════════════════════════════════════════════
-#  DASHBOARD STATS
-# ═══════════════════════════════════════════════════════
+
 
 @admin_bp.route("/dashboard", methods=["GET"])
 @token_required
@@ -45,10 +43,6 @@ def dashboard(current_user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-# ═══════════════════════════════════════════════════════
-#  OFFICER MANAGEMENT
-# ═══════════════════════════════════════════════════════
 
 @admin_bp.route("/officers", methods=["GET"])
 @token_required
@@ -145,10 +139,6 @@ def delete_officer(current_user, officer_id):
         return jsonify({"error": str(e)}), 500
 
 
-# ═══════════════════════════════════════════════════════
-#  USER VERIFICATION
-# ═══════════════════════════════════════════════════════
-
 @admin_bp.route("/users", methods=["GET"])
 @token_required
 def get_users(current_user):
@@ -238,9 +228,6 @@ def ban_user(current_user, user_id):
     return jsonify({"message": f"User {action}ned successfully"}), 200
 
 
-# ═══════════════════════════════════════════════════════
-#  COMPLAINT MANAGEMENT
-# ═══════════════════════════════════════════════════════
 
 @admin_bp.route("/complaints", methods=["GET"])
 @token_required

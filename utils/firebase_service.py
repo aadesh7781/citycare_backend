@@ -1,7 +1,4 @@
-"""
-Firebase Cloud Messaging Service
-Handles sending push notifications to Flutter app
-"""
+
 import os
 import json
 import tempfile
@@ -11,7 +8,6 @@ from datetime import datetime
 
 
 def _write_firebase_credentials() -> Optional[str]:
-    """Write Firebase credentials from env var to a temp file, return path."""
     firebase_json = os.environ.get("FIREBASE_JSON")
     if firebase_json:
         try:
@@ -77,11 +73,7 @@ class FirebaseService:
             body: str,
             data: Optional[Dict] = None
     ) -> bool:
-        """
-        Send FCM notification with BOTH notification and data payloads.
-        - notification payload: Makes it appear in system tray automatically
-        - data payload: Allows in-app handling and custom actions
-        """
+
         if not token:
             print("⚠️ No FCM token provided")
             return False
@@ -253,7 +245,6 @@ class FirebaseService:
             rating: int,
             category: str
     ) -> bool:
-        """Notify officer of feedback received"""
         stars = "⭐" * rating
         title = f"📊 Feedback Received {stars}"
         body = f"You received a {rating}-star rating for {category} complaint"

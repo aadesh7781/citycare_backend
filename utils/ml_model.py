@@ -6,7 +6,6 @@ import pickle
 import re
 import os
 
-# ── Model Definition ──────────────────────────────────────────────
 class UrgencyModel(nn.Module):
     def __init__(self, vocab_size, embed_dim=64):
         super(UrgencyModel, self).__init__()

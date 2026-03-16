@@ -48,14 +48,12 @@ def init_db():
         return False
 
 def get_db():
-    """Get database instance"""
     global db
     if db is None:
         init_db()
     return db
 
 def create_indexes():
-    """Create database indexes for better performance"""
     global db
 
     try:
@@ -75,7 +73,6 @@ def create_indexes():
         print(f"⚠️  Warning: Could not create indexes: {e}")
 
 def close_db():
-    """Close MongoDB connection"""
     global client
     if client:
         client.close()
